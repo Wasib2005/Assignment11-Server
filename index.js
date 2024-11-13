@@ -34,7 +34,7 @@ const mongodbRun = async () => {
 
     app.get("/total_food_data", async (req, res) => {
       const totalData = await FoodDataCollection.countDocuments();
-      const result = ({ totalData });
+      const result = { totalData };
       res.status(200).send(result);
     });
 
@@ -84,15 +84,15 @@ const mongodbRun = async () => {
 
     app.get("/food_data_random", async (req, res) => {
       const {
-        name,
-        needData,
-        description,
-        price,
+        name = 1,
+        needData = 6,
+        description = 1,
+        price = 1,
         category,
         ingredients,
-        image,
-        rating,
-        cookingTime,
+        image = 1,
+        rating = 1,
+        cookingTime = 1,
         reviews,
       } = req.query;
       const projection = {};
@@ -119,6 +119,75 @@ const mongodbRun = async () => {
       ]).toArray();
       res.status(200).send(randomData);
       return;
+    });
+
+    app.get("/food_data_top_sell", async (req, res) => {
+      const {
+        name = 1,
+        needData = 6,
+        description = 1,
+        price = 1,
+        category,
+        ingredients,
+        image = 1,
+        rating = 1,
+        cookingTime = 1,
+        reviews,
+      } = req.query;
+
+      // Create a projection object based on query parameters
+      const projection = {};
+      if (name) projection.name = 1;
+      if (description) projection.description = 1;
+      if (price) projection.price = 1;
+      if (category) projection.category = 1;
+      if (ingredients) projection.ingredients = 1;
+      if (image) projection.image = 1;
+      if (rating) projection.rating = 1;
+      if (cookingTime) projection.cookingTime = 1;
+      if (reviews) projection.reviews = 1;
+
+      if (Object.keys(projection).length === 0) {
+        return res
+          .status(400)
+          .send("Please provide at least one property to retrieve.");
+      }
+      
+      console.log(projection)
+
+      try {
+        const randomData = await FoodDataCollection.aggregate([
+          { $sort: { rating: -1 } },
+
+          { $limit: parseInt(needData, 10) },
+
+          { $project: projection },
+        ]).toArray();
+
+        res.status(200).send(randomData);
+      } catch (error) {
+        console.error("Error fetching top selling food data:", error);
+        res.status(500).send("An error occurred while fetching data.");
+      }
+    });
+
+    app.get("/food_filter_option/:option", async (req, res) => {
+      const option = req.params.option;
+
+      try {
+        const filterArray = await FoodDataCollection.aggregate([
+          { $group: { _id: `$${option}` } },
+          { $project: { value: "$_id" } },
+          { $sort: { value: 1 } },
+        ]).toArray();
+
+        const values = filterArray.map((item) => item.value); // Extract the category values into an array
+
+        res.status(200).json({ filterArray: values }); // Send the array of categories as the response
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Error fetching filter data" });
+      }
     });
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);
