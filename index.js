@@ -118,7 +118,6 @@ const mongodbRun = async () => {
         },
       ]).toArray();
       res.status(200).send(randomData);
-      return;
     });
 
     app.get("/food_data_top_sell", async (req, res) => {
@@ -152,42 +151,85 @@ const mongodbRun = async () => {
           .status(400)
           .send("Please provide at least one property to retrieve.");
       }
-      
-      console.log(projection)
 
-      try {
-        const randomData = await FoodDataCollection.aggregate([
-          { $sort: { rating: -1 } },
+      console.log(projection);
 
-          { $limit: parseInt(needData, 10) },
+      const randomData = await FoodDataCollection.aggregate([
+        { $sort: { rating: -1 } },
 
-          { $project: projection },
-        ]).toArray();
+        { $limit: parseInt(needData, 10) },
 
-        res.status(200).send(randomData);
-      } catch (error) {
-        console.error("Error fetching top selling food data:", error);
-        res.status(500).send("An error occurred while fetching data.");
-      }
+        { $project: projection },
+      ]).toArray();
+
+      res.status(200).send(randomData);
+
+      console.error("Error fetching top selling food data ");
     });
 
     app.get("/food_filter_option/:option", async (req, res) => {
       const option = req.params.option;
 
-      try {
-        const filterArray = await FoodDataCollection.aggregate([
-          { $group: { _id: `$${option}` } },
-          { $project: { value: "$_id" } },
-          { $sort: { value: 1 } },
-        ]).toArray();
+      const filterArray = await FoodDataCollection.aggregate([
+        { $group: { _id: `$${option}` } },
+        { $project: { value: "$_id" } },
+        { $sort: { value: 1 } },
+      ]).toArray();
 
-        const values = filterArray.map((item) => item.value); // Extract the category values into an array
+      const values = filterArray.map((item) => item.value);
 
-        res.status(200).json({ filterArray: values }); // Send the array of categories as the response
-      } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Error fetching filter data" });
-      }
+      res.status(200).json({ filterArray: values });
+    });
+
+    app.get("/max_min_price_food", async (req, res) => {
+      const maxPriceFood = await FoodDataCollection.aggregate([
+        {
+          $group: {
+            _id: null,
+            maxPrice: { $max: "$price" },
+          },
+        },
+      ]).toArray();
+      const minPriceFood = await FoodDataCollection.aggregate([
+        {
+          $group: {
+            _id: null,
+            minPrice: { $min: "$price" },
+          },
+        },
+      ]).toArray();
+
+      const result = {
+        max: maxPriceFood[0].maxPrice,
+        min: minPriceFood[0].minPrice,
+      };
+
+      res.status(200).send(result);
+    });
+    app.get("/cooking_time_food", async (req, res) => {
+      const maxCookingTime = await FoodDataCollection.aggregate([
+        {
+          $group: {
+            _id: null,
+            maxCookingTime: { $max: "$cookingTime" },
+          },
+        },
+      ]).toArray();
+      const minCookingTime = await FoodDataCollection.aggregate([
+        {
+          $group: {
+            _id: null,
+            minCookingTime: { $min: "$cookingTime" },
+          },
+        },
+      ]).toArray();
+
+      const result = {
+        max: maxCookingTime[0].maxCookingTime,
+        min: minCookingTime[0].minCookingTime,
+      };
+
+      res.status(200).send(result);
     });
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);
