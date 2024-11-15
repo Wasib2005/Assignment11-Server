@@ -81,6 +81,7 @@ const mongodbRun = async () => {
     //       }
     //     ]
     //   }
+    
 
     app.get("/food_data_random", async (req, res) => {
       const {
@@ -163,10 +164,7 @@ const mongodbRun = async () => {
       ]).toArray();
 
       res.status(200).send(randomData);
-
-      console.error("Error fetching top selling food data ");
     });
-
     app.get("/food_filter_option/:option", async (req, res) => {
       const option = req.params.option;
 
@@ -180,7 +178,6 @@ const mongodbRun = async () => {
 
       res.status(200).json({ filterArray: values });
     });
-
     app.get("/max_min_price_food", async (req, res) => {
       const maxPriceFood = await FoodDataCollection.aggregate([
         {
@@ -230,6 +227,59 @@ const mongodbRun = async () => {
       };
 
       res.status(200).send(result);
+    });
+
+    app.post("/data_filter", async (req, res) => {
+      const filter = req.body;
+
+      const query = {};
+
+      if (filter.Category && filter.Category !== "default") {
+        query.category = filter.Category;
+      }
+
+      if (filter.minPrice || filter.maxPrice) {
+        query.price = {};
+        if (filter.minPrice) {
+          query.price.$gte = parseFloat(filter.minPrice);
+        }
+        if (filter.maxPrice) {
+          query.price.$lte = parseFloat(filter.maxPrice);
+        }
+      }
+
+      if (filter.minCookingTime || filter.maxCookingTime) {
+        query.cookingTime = {};
+        if (filter.minCookingTime) {
+          query.cookingTime.$gte = parseInt(filter.minCookingTime);
+        }
+        if (filter.maxCookingTime) {
+          query.cookingTime.$lte = parseInt(filter.maxCookingTime);
+        }
+      }
+
+
+      if (filter.rating > 0) {
+        query.rating = { $gte: parseFloat(filter.rating) };
+      }
+
+
+      const filterConfig = [
+        { $match: query },
+        { $sort: { [filter.SortBy]: filter.Order === "asc" ? 1 : -1 } },
+        { $skip: (filter.selectedPage - 1) * filter.perPage },
+        { $limit: filter.perPage },
+      ];
+
+      const count = await FoodDataCollection.countDocuments(query);
+      const results = await FoodDataCollection.aggregate(
+        filterConfig
+      ).toArray();
+      
+      console.log(filter)
+      console.log(filter.rating, query.rating,count);
+
+      res.status(200).json({results,count});
     });
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);
