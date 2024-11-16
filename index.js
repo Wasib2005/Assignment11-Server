@@ -32,10 +32,44 @@ const mongodbRun = async () => {
     const db = client.db("RestaurantDatabase");
     const FoodDataCollection = db.collection("FoodData");
 
+    app.get("/foodData", async (req, res) => {
+      const { id } = req.query;
+      const query = {};
+      if (id) {
+        query._id = new ObjectId(id);
+      }
+      console.log(query);
+      result = await FoodDataCollection.findOne(query);
+
+      res.status(200).send(result);
+    });
+
     app.get("/total_food_data", async (req, res) => {
       const totalData = await FoodDataCollection.countDocuments();
       const result = { totalData };
       res.status(200).send(result);
+    });
+
+    app.post("/onlyPrice", async (req, res) => {
+      console.log(1);
+      const dataCard = req.body;
+      // const dataCard = [
+      //   { id: "673235274926400fd5f923f4", quantity: 5 },
+      //   { id: "673235274926400fd5f923e2", quantity: 2 },
+      //   { id: "673235274926400fd5f923e8", quantity: 1 },
+      //   { id: "673235274926400fd5f923ca", quantity: 1 },
+      //   { id: "673235274926400fd5f923ee", quantity: 1 },
+      // ];
+      // [ { id: '673235274926400fd5f923f4', quantity: 4 } ]
+      const ids = await dataCard.map((e) => e.id);
+
+      const queryIds = ids.map((e) => new ObjectId(e));
+      const query = { _id: { $in: queryIds } };
+      const option = {projection:{_id:0,price:1}};
+      const data = await FoodDataCollection.find(query,option);
+      const result = await data.toArray();
+      res.status(200).send(result);
+      // console.log(dataCard);
     });
 
     // {
@@ -81,7 +115,6 @@ const mongodbRun = async () => {
     //       }
     //     ]
     //   }
-    
 
     app.get("/food_data_random", async (req, res) => {
       const {
@@ -258,11 +291,9 @@ const mongodbRun = async () => {
         }
       }
 
-
       if (filter.rating > 0) {
         query.rating = { $gte: parseFloat(filter.rating) };
       }
-
 
       const filterConfig = [
         { $match: query },
@@ -275,16 +306,16 @@ const mongodbRun = async () => {
       const results = await FoodDataCollection.aggregate(
         filterConfig
       ).toArray();
-      
-      console.log(filter)
-      console.log(filter.rating, query.rating,count);
 
-      res.status(200).json({results,count});
+      console.log(filter);
+      console.log(filter.rating, query.rating, count);
+
+      res.status(200).json({ results, count });
     });
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);
 
-    const restartTime = 1000 * 60 * 10;
+    const restartTime = 1000;
     console.log(`Attempting to reconnect in ${restartTime / 60000} minutes`);
 
     setTimeout(mongodbRun, restartTime);
