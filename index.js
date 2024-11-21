@@ -1,17 +1,21 @@
 require("dotenv").config();
 const express = require("express");
-
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
+
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(
   cors({
-    origin: "http://localhost:5173", // Only allow requests from this domain
+    origin: "http://localhost:5173",
+    credentials: true,
   })
 );
 app.use(express.json());
+app.use(cookieParser());
 
 const uri = "mongodb://localhost:27017";
 
@@ -31,16 +35,45 @@ const mongodbRun = async () => {
     // Example: Access a database and collection
     const db = client.db("RestaurantDatabase");
     const FoodDataCollection = db.collection("FoodData");
+    const UsersCollection = db.collection("Users");
+    const OwnersCollection = db.collection("Owners");
+
+    const verifyTokenOwner = async (req, res, next) => {
+      const token = req.cookies.token;
+
+      if (!token) {
+        return res.status(401).json({ message: "Access denied." });
+      }
+
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET); // Decode and verify the token
+        req.user = decoded;
+        const { email, id } = req.user;
+        const user = await OwnersCollection.findOne({
+          email,
+          _id: new ObjectId(id),
+        });
+        console.log(user);
+        if (!user) {
+          return res.status(403).json({ message: "Forbidden" });
+        }
+        console.log(req.user);
+        next(); // Proceed to the next middleware or route handler
+      } catch (error) {
+        res.status(403).json({ message: "Invalid token." });
+      }
+    };
 
     app.get("/foodData", async (req, res) => {
       const { id } = req.query;
+      console.log(req.query)
       const query = {};
       if (id) {
         query._id = new ObjectId(id);
       }
       console.log(query);
       result = await FoodDataCollection.findOne(query);
-
+      console.log(result)
       res.status(200).send(result);
     });
 
@@ -65,8 +98,8 @@ const mongodbRun = async () => {
 
       const queryIds = ids.map((e) => new ObjectId(e));
       const query = { _id: { $in: queryIds } };
-      const option = {projection:{_id:0,price:1}};
-      const data = await FoodDataCollection.find(query,option);
+      const option = { projection: { _id: 0, price: 1 } };
+      const data = await FoodDataCollection.find(query, option);
       const result = await data.toArray();
       res.status(200).send(result);
       // console.log(dataCard);
@@ -311,6 +344,142 @@ const mongodbRun = async () => {
       console.log(filter.rating, query.rating, count);
 
       res.status(200).json({ results, count });
+    });
+    app.post("/add_update_data", async (req, res) => {
+      const reqData = req.body;
+      reqData.price = Number(reqData.price);
+      reqData.cookingTime = Number(reqData.cookingTime);
+      reqData.image = { "1:1": reqData.image1, "16:9": reqData.image2 };
+      reqData.reviews = [];
+      reqData.rating = Number((Math.random() * (5 - 0) + 0).toFixed(2));
+      delete reqData.image1;
+      delete reqData.image2;
+      console.log(reqData);
+      const result = await FoodDataCollection.insertOne(reqData);
+      console.log(`A document was inserted with the _id: ${result.insertedId}`);
+      res.status(200).send("ok");
+    });
+    app.post("/create_new_user", async (req, res) => {
+      const userData = req.body;
+      const userEmail = userData.email;
+
+      const emailInDatabase = await UsersCollection.findOne({
+        email: userEmail,
+      });
+
+      if (!emailInDatabase) {
+        const result = await UsersCollection.insertOne(userData);
+        res.status(201).send("account created");
+      } else {
+        res.status(409).send("email already exists in database");
+      }
+    });
+
+    app.post("/user_perm", async (req, res) => {
+      console.log("Request received:", req.body);
+
+      const clientEmail = req.body.email;
+      if (!clientEmail) {
+        return res.status(400).json({ message: "Email is required." });
+      }
+
+      const result = await OwnersCollection.findOne({ email: clientEmail });
+
+      if (result) {
+        console.log(1);
+        const token = jwt.sign(
+          { email: result.email, id: result._id, isUserOwner: true },
+          process.env.JWT_SECRET,
+          { expiresIn: "1d" }
+        );
+        return res
+          .status(200)
+          .cookie("token", token, {
+            httpOnly: true,
+            secure: false,
+            SameSite: "None",
+          })
+          .send({
+            message: "Token generated successfully.",
+            isUserOwner: true,
+          });
+      }
+
+      const userResult = await UsersCollection.findOne({ email: clientEmail });
+
+      if (userResult) {
+        console.log(2);
+
+        const token = jwt.sign(
+          {
+            email: userResult.email,
+            id: userResult._id,
+            isUserOwner: false,
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: "1d" }
+        );
+
+        return res
+          .status(200)
+          .cookie("token", token, {
+            httpOnly: true,
+            secure: false,
+            SameSite: "None",
+          })
+          .send({
+            message: "Token generated successfully.",
+            isUserOwner: false,
+          });
+      }
+
+      if (!result && !userResult) {
+        return res.status(404).json({ message: " not found." });
+      }
+    });
+
+    app.post("/test", async (req, res) => {
+      console.log(1);
+
+      console.log("Cookies: ", req.cookies);
+
+      const token = req.cookies.token;
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log("Token:", decoded);
+      } catch (error) {
+        console.log(error);
+      }
+
+      res.send({ message: "Cookies logged successfully." });
+    });
+
+    // Example in Node.js using express:
+    app.post("/logout", (req, res) => {
+      res.clearCookie("token", {
+        path: "/",
+        httpOnly: true,
+        secure: true,
+        sameSite: "None",
+      });
+      res.status(200).send("Logged out successfully");
+    });
+
+    app.post("/upload_update", verifyTokenOwner, async (req, res) => {
+      const data = req.body;
+      if (data.isNew) {
+        const result = await FoodDataCollection.insertOne(data);
+
+        console.log(result);
+        res.status(200).send(result);
+      } else {
+
+      }
+    });
+
+    // Start the server
+    app.listen(3000, () => {
+      console.log("Server is running on port 3000");
     });
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);
