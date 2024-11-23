@@ -66,14 +66,14 @@ const mongodbRun = async () => {
 
     app.get("/foodData", async (req, res) => {
       const { id } = req.query;
-      console.log(req.query)
+      console.log(req.query);
       const query = {};
       if (id) {
         query._id = new ObjectId(id);
       }
       console.log(query);
       result = await FoodDataCollection.findOne(query);
-      console.log(result)
+      console.log(result);
       res.status(200).send(result);
     });
 
@@ -454,6 +454,13 @@ const mongodbRun = async () => {
       res.send({ message: "Cookies logged successfully." });
     });
 
+    app.post("/delete_with_id", verifyTokenOwner, async (req, res) => {
+      const { id } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const result = await FoodDataCollection.deleteOne(query);
+      res.status(202).send(result);
+    });
+
     // Example in Node.js using express:
     app.post("/logout", (req, res) => {
       res.clearCookie("token", {
@@ -473,7 +480,6 @@ const mongodbRun = async () => {
         console.log(result);
         res.status(200).send(result);
       } else {
-
       }
     });
 
