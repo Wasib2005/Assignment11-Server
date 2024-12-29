@@ -17,7 +17,8 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-const uri = "mongodb://localhost:27017";
+const uri =
+  "mongodb+srv://Waslla2:LFXMXTwoeKth4drU@cluster0.gjjj5.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -37,16 +38,16 @@ const mongodbRun = async () => {
     const FoodDataCollection = db.collection("FoodData");
     const UsersCollection = db.collection("Users");
     const OwnersCollection = db.collection("Owners");
+    const OrdersCollection = db.collection("Orders");
 
     const verifyTokenOwner = async (req, res, next) => {
       const token = req.cookies.token;
-
       if (!token) {
         return res.status(401).json({ message: "Access denied." });
       }
 
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET); // Decode and verify the token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
         const { email, id } = req.user;
         const user = await OwnersCollection.findOne({
@@ -65,6 +66,7 @@ const mongodbRun = async () => {
     };
 
     app.get("/foodData", async (req, res) => {
+      console.log(1);
       const { id } = req.query;
       console.log(req.query);
       const query = {};
@@ -480,6 +482,50 @@ const mongodbRun = async () => {
         console.log(result);
         res.status(200).send(result);
       } else {
+      }
+    });
+
+    app.post("/CheckOutHandle", async (req, res) => {
+      const { user, data } = req.body;
+      console.log(req.body);
+      console.log(user, data);
+      const token = req.cookies.token;
+
+      if (req.body.user === "Anonymous") {
+        console.log("anonymous");
+        const result = await OrdersCollection.insertOne(data);
+        res.status(202).send("successful");
+        console.log(result);
+      } else {
+        console.log("with user");
+        try {
+          const decoded = await jwt.verify(token, process.env.JWT_SECRET);
+          const result = await OrdersCollection.insertOne(data);
+          console.log(result);
+          res.status(202).send("successful");
+        } catch (error) {
+          console.log("forbidden");
+          res.status(403).send("forbidden");
+        }
+      }
+    });
+
+    app.get("/user-order", async (req, res) => {
+      const token = req.cookies.token;
+      console.log(token);
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log(decoded);
+        const { email } = decoded;
+        const query = { user: email };
+        const option = {
+          sort: { date: 1 },
+          projection: { user: 0 },
+        };
+        const result = await OrdersCollection.find(query, option).toArray();
+        res.status(200).send(result);
+      } catch (error) {
+        console.log(error)
       }
     });
 
